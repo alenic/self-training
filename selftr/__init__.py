@@ -1,4 +1,4 @@
 from .dataset import *
 
 
-__all__ = ["DatasetSelfTraining"]
+__all__ = ["ImageDataset"]

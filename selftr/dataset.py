@@ -7,48 +7,29 @@ from PIL import Image
 import glob
 import os
 import numpy as np
-from typing import Any, Callable, cast, Dict, List, Optional, Tuple
+from typing import Any, Callable, cast, Dict, List, Optional, Tuple, Iterable
 
 
-class DatasetSelfTraining(Dataset):
+class ImageDataset(Dataset):
     def __init__(
         self,
-        supervised_root: str,
-        supervised_images: [list, np.ndarray],
-        supervised_labels: [list, np.ndarray],
-        unsupervised_root: str,
-        unsupervised_images: [list, np.ndarray],
-        transform_phase_1: Optional[Callable] = None,
-        transform_phase_2: Optional[Callable] = None,
-        transform_phase_3: Optional[Callable] = None,
-    ):
-        self.SUPERVISED = 1
-        self.PSEUDOLABEL = 2
-        self.MERGED = 3
+        root: str,
+        images: [Iterable],
+        labels: Optional[Iterable] = None,
+        transform: Optional[Callable] = None,
+    ) -> None:
 
-        self._state = self.SUPERVISED
-        self.supervised_root = supervised_root
-        self.unsupervised_root = unsupervised_root
-        self.supervised_images = supervised_images
-        self.supervised_labels = supervised_labels
-        self.unsupervised_images = unsupervised_images
-        self._pseudolabels = None
-        self._merged_images = None
-        self._merged_labels = None
+        self.root = root
+        self.images = images
+        self.labels = labels
+        self.transform = transform
 
-        self.transform_phase_1 = transform_phase_1
-        self.transform_phase_2 = transform_phase_2
-        self.transform_phase_3 = transform_phase_3
+        self._checkDatasetInHardDisk(root, images)
 
-        self._check_dataset_in_hard_disk(supervised_root, supervised_images)
-        self._check_dataset_in_hard_disk(unsupervised_root, unsupervised_images)
+        if self.labels is not None:
+            self._checkImageLabelLen(self.images, self.labels)
 
-        if len(self.supervised_labels) != len(self.supervised_images):
-            raise ValueError(
-                f"supervised_images (len: {len(self.supervised_images)}) not matches supervised_labels (len: {len(self.supervised_labels)}):"
-            )
-
-    def _check_dataset_in_hard_disk(self, dataset_root: str, images: list):
+    def _checkDatasetInHardDisk(self, dataset_root: str, images: Iterable) -> None:
         valid_ext = [".jpg", ".png", ".bmp", ".gif"]
 
         # Check that supervised images have valid extension
@@ -71,61 +52,31 @@ class DatasetSelfTraining(Dataset):
             if f not in files_rel:
                 raise ValueError(f"Files not found in {dataset_root}: {f}")
 
-    def setPseudolabelState(self, pseudolabels: list):
-        n_labels = len(pseudolabels)
-        n_images = len(self.unsupervised_images)
+    def _checkImageLabelLen(self, images: Iterable, labels: Iterable) -> None:
+        n_labels = len(labels)
+        n_images = len(images)
         if n_labels != n_images:
             raise ValueError(
-                f"pseudolabels (len: {n_labels}) must equals unsupervised_images (len: {n_images})"
+                f"labels (len: {n_labels}) must equals images (len: {n_images})"
             )
-        self._pseudolabels = pseudolabels
-        self._merged_images = [
-            os.path.join(self.supervised_root, f) for f in self.supervised_images
-        ]
-        self._merged_images += [
-            os.path.join(self.unsupervised_root, f) for f in self.unsupervised_images
-        ]
-        self._merged_labels = self.supervised_labels + self._pseudolabels
 
-        self._state = self.PSEUDOLABEL
+    def setLabels(self, labels: Iterable) -> None:
+        self._checkImageLabelLen(self.images, labels)
+        self.labels = labels
 
-    def setSupervisedState(self):
-        self._state = self.SUPERVISED
-
-    def setMergedState(self):
-        self._state = self.MERGED
-
-    def __len__(self):
-        return len(self.supervised_label)
+    def __len__(self) -> int:
+        return len(self.images)
 
     def __getitem__(self, index: int):
-        if self._state == self.SUPERVISED:
-            transform = self.transform_phase_1
-            file_path = os.path.join(
-                self.supervised_root, self.supervised_images[index]
-            )
-            label = self.supervised_labels[index]
-
-        elif self._state == self.PSEUDOLABEL:
-            transform = self.transform_phase_2
-            file_path = os.path.join(
-                self.unsupervised_root, self.unsupervised_images[index]
-            )
-            label = None
-        elif self._state == self.MERGED:
-            transform = self.transform_phase_3
-            file_path = os.path.join(self._merged_images[index])
-            label = self._merged_labels[index]
+        file_path = os.path.join(self.root, self.images[index])
 
         with open(file_path, "rb") as f:
-            img = Image.open(f)
+            img = Image.open(f).convert("RGB")
 
-        img = img.convert("RGB")
+        if self.transform is not None:
+            img = self.transform(img)
 
-        if transform:
-            img = transform(img)
-
-        if label:
-            return img, label
+        if self.labels is not None:
+            return img, self.labels[index]
 
         return img
