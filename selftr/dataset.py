@@ -24,7 +24,7 @@ class ImageDataset(Dataset):
         self.labels = labels
         self.transform = transform
 
-        self._checkDatasetInHardDisk(root, images)
+        # self._checkDatasetInHardDisk(root, images)
 
         if self.labels is not None:
             self._checkImageLabelLen(self.images, self.labels)
