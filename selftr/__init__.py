@@ -1,5 +1,3 @@
 from .dataset import *
-from .models import *
 
-
-__all__ = ["ImageDataset", "CNNSuper"]
+__all__ = ["ImageDataset"]
